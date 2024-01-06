@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 type URLConfig struct {
@@ -13,28 +14,36 @@ type URLConfig struct {
 }
 
 func main() {
-	data, err := os.ReadFile("urls.json")
-	if err != nil {
-		fmt.Println("Error reading JSON file:", err)
-		return
+	ticker := time.NewTicker(time.Minute*5)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			data, err := os.ReadFile("urls.json")
+			if err != nil {
+				fmt.Println("Error reading JSON file:", err)
+				return
+			}
+
+			var config URLConfig
+			if err := json.Unmarshal(data, &config); err != nil {
+				fmt.Println("Error decoding JSON:", err)
+				return
+			}
+
+			var wg sync.WaitGroup
+
+			for _, url := range config.URLs {
+				wg.Add(1)
+				go makeHTTPRequest(url, &wg)
+			}
+
+			wg.Wait()
+
+			fmt.Println("All HTTP requests completed.")
+		}
 	}
-
-	var config URLConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		fmt.Println("Error decoding JSON:", err)
-		return
-	}
-
-	var wg sync.WaitGroup
-
-	for _, url := range config.URLs {
-		wg.Add(1)
-		go makeHTTPRequest(url, &wg)
-	}
-
-	wg.Wait()
-
-	fmt.Println("All HTTP requests completed.")
 }
 
 func makeHTTPRequest(url string, wg *sync.WaitGroup) {
