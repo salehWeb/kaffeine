@@ -14,23 +14,27 @@ type URLConfig struct {
 }
 
 func main() {
-	ticker := time.NewTicker(time.Minute*5)
+	data, err := os.ReadFile("urls.json")
+	if err != nil {
+		fmt.Println("Error reading JSON file:", err)
+		return
+	}
+
+	var config URLConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		fmt.Println("Error decoding JSON:", err)
+		return
+	}
+
+	go startServer(config)
+
+	ticker := time.NewTicker(time.Minute * 5)
+
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			data, err := os.ReadFile("urls.json")
-			if err != nil {
-				fmt.Println("Error reading JSON file:", err)
-				return
-			}
-
-			var config URLConfig
-			if err := json.Unmarshal(data, &config); err != nil {
-				fmt.Println("Error decoding JSON:", err)
-				return
-			}
 
 			var wg sync.WaitGroup
 
@@ -44,6 +48,25 @@ func main() {
 			fmt.Println("All HTTP requests completed.")
 		}
 	}
+}
+
+func startServer(config URLConfig) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello, Golang Server!")
+		var wg sync.WaitGroup
+
+		for _, url := range config.URLs {
+			wg.Add(1)
+			go makeHTTPRequest(url, &wg)
+		}
+
+		wg.Wait()
+	}
+
+	http.HandleFunc("/", handler)
+
+	fmt.Println("Server is running on http://localhost:8080")
+	http.ListenAndServe(":8080", nil)
 }
 
 func makeHTTPRequest(url string, wg *sync.WaitGroup) {
